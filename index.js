@@ -1,5 +1,4 @@
 const _ = require('lodash');
-//const swaggerSpecValidator = require('swagger-spec-validator');
 
 const METHODS = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options', 'trace'];
 const CREATE_METHODS = ['post', 'patch', 'put'];
@@ -17,6 +16,8 @@ var request = require('request');
 var cheerio = require('cheerio');
 var generateSchema = require('json-schema-generator');
 const yaml = require('yaml');
+const statusCodes = require('./statusCodes').statusCodes;
+const validator = require('oas-validator');
 var argv = require('yargs').argv;
 if (argv.name) {
   argv.config = __dirname + '/config/' + argv.name + '.js';
@@ -221,7 +222,7 @@ function addOperationToOpenapi($, op, method, path, qs) {
     var responseDescription = extractText(response, config.responseDescription);
     var responseSchema = extractJSON(response, config.responseSchema);
     sOp.responses[responseStatus] = {
-        description: responseDescription || ''
+        description: responseDescription || statusCodes[responseStatus]
     };
     if (responseSchema) {
       sOp.responses[responseStatus].content = {
@@ -376,14 +377,14 @@ scrapeInfo(config.url, function(err) {
     outputFile = argv.output || './openapi.yaml';
     fs.writeFileSync(outputFile, yaml.stringify(deepSort(openapi)));
     if (argv.validate) {
-      //swaggerSpecValidator.validateFile(outputFile)
-      //    .then(result => {
-      //      if (Object.keys(result).length === 0) {
-      //        console.log('Spec is valid');
-      //      } else {
-      //        console.log('Spec is invalid');
-      //      }
-      //    })
-    }
-  });
+      const options = {};
+      validator.validate(openapi, options)
+        .then(result => {
+          console.log('Output is valid');
+        })
+        .catch(ex => {
+          console.log('Output is invalid',ex.message);
+        });
+      }
+    })
 });
