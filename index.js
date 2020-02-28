@@ -1,10 +1,11 @@
-var METHODS = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options'];
-var CREATE_METHODS = ['post', 'patch', 'put'];
-const swaggerSpecValidator = require('swagger-spec-validator');
 const _ = require('lodash');
+//const swaggerSpecValidator = require('swagger-spec-validator');
+
+const METHODS = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options', 'trace'];
+const CREATE_METHODS = ['post', 'patch', 'put'];
 
 var getDefaultParameterLocation = function(method) {
-  if (method === 'post' || method === 'patch' || method === 'put') return 'formData';
+  if (method === 'post' || method === 'patch' || method === 'put') return 'requestBody';
   return 'query';
 }
 
@@ -15,22 +16,26 @@ var async = require('async');
 var request = require('request');
 var cheerio = require('cheerio');
 var generateSchema = require('json-schema-generator');
+const yaml = require('yaml');
 var argv = require('yargs').argv;
 if (argv.name) {
   argv.config = __dirname + '/config/' + argv.name + '.js';
-  argv.output = __dirname + '/output/' + argv.name + '.swagger.json';
+  argv.output = __dirname + '/output/' + argv.name + '.openapi.yaml';
 }
 var config = require(argv.config);
 let locs = config.defaultParameterLocations = config.defaultParameterLocations || {};
 METHODS.forEach(m => locs[m] = locs[m] || getDefaultParameterLocation(m));
 
-var swagger = {
-  swagger: '2.0',
+var openapi = {
+  openapi: '3.0.0',
   paths: {},
   info: {},
-  host: config.host,
-  basePath: config.basePath,
-  securityDefinitions: config.securityDefinitions,
+  servers: [
+    { url: (config.schemes ? config.schemes[0] : 'https')+'://'+config.host+config.basePath, description: 'Default' }
+  ],
+  components: {
+    securitySchemes: (config.securityDefinitions ? config.securityDefinitions : {})
+  }
 };
 
 var parsed = urlParser.parse(config.url);
@@ -46,11 +51,11 @@ function scrapeInfo(url, callback) {
     var $ = cheerio.load(body);
     var body = $('body');
 
-    var base = ['basePath', 'host']
-    var info = ['title', 'description', 'version'];
-    base.forEach(function(i) {swagger[i] = extractText(body, config[i])})
-    info.forEach(function(i) {swagger.info[i] = extractText(body, config[i])})
-    swagger.schemes = config.schemes || ['https'];
+    //! var base = ['basePath', 'host']
+    //! swagger.schemes = config.schemes || ['https'];
+    //! base.forEach(function(i) {swagger[i] = extractText(body, config[i])})
+    const info = ['title', 'description', 'version'];
+    info.forEach(function(i) {openapi.info[i] = extractText(body, config[i])})
     callback();
   })
 }
@@ -67,7 +72,7 @@ function scrapePage(url, depth, callback) {
   request.get(url, function(err, resp, body) {
     if (err) return callback(err);
     var $ = cheerio.load(body);
-    addPageToSwagger($);
+    addPageToOpenapi($);
     if (!depth) return callback();
     var links = $('a[href]');
     async.series($('a[href]').map(function(i, el) {
@@ -80,7 +85,7 @@ function scrapePage(url, depth, callback) {
   })
 }
 
-function addPageToSwagger($) {
+function addPageToOpenapi($) {
   var body = $('body');
   operations = resolveSelector(body, config.operations, $);
   operations = resolveSelector(operations, config.operation, $);
@@ -98,21 +103,23 @@ function addPageToSwagger($) {
     if (config.fixPathParameters) path = config.fixPathParameters(path, $, resolveSelector(op, config.path));
     var paths = Array.isArray(path) ? path : [path];
     paths.forEach(function(path) {
-      addOperationToSwagger($, op, method, path, parsed.query);
+      addOperationToOpenapi($, op, method, path, parsed.query);
     });
   });
 }
 
-function addOperationToSwagger($, op, method, path, qs) {
-  var sPath = swagger.paths[path] = swagger.paths[path] || {};
+function addOperationToOpenapi($, op, method, path, qs) {
+  var sPath = openapi.paths[path] = openapi.paths[path] || {};
   var sOp = sPath[method] = sPath[method] || {parameters: [], responses: {}};
-  sOp.summary = extractText(op, config.operationSummary) || undefined;
-  sOp.description = extractText(op, config.operationDescription) || undefined;
+  const summary = extractText(op, config.operationSummary);
+  if (summary) sOp.summary = summary.trim();
+  const description = extractText(op, config.operationDescription);
+  if (description) sOp.description = description.trim();
   for (var key in qs) {
     sOp.parameters.push({
       name: key,
-      type: 'string',
       in: 'query',
+      schema: { type: 'string' },
     })
   }
 
@@ -164,28 +171,28 @@ function addOperationToSwagger($, op, method, path, qs) {
       log('      no name!')
       return;
     }
-    var sParameter = {name: name};
+    var sParameter = { name: name, schema: {} };
     var description = extractText(param, config.parameterDescription);
     if (description) sParameter.description = description.trim();
     var required = extractBoolean(param, config.parameterRequired);
     if (required === true || required === false) sParameter.required = required;
-    sParameter.type = extractText(param, config.parameterType).toLowerCase() || 'string';
-    if (sParameter.type === 'array') {
-      sParameter.items = {type: 'string'};
+    sParameter.schema.type = extractText(param, config.parameterType).toLowerCase() || 'string';
+    if (sParameter.schema.type === 'array') {
+      sParameter.schema.items = {type: 'string'};
       if (config.parameterArrayType) {
-        sParameter.items.type = extractText(param, config.parameterArrayType).toLowerCase() || 'string';
+        sParameter.schema.items.type = extractText(param, config.parameterArrayType).toLowerCase() || 'string';
       }
     }
     if (config.parameterEnum) {
       var enm = resolveSelector(param, config.parameterEnum);
       enm = resolveSelector(enm, config.parameterEnumValues);
       if (enm.length) {
-        sParameter.enum = [];
+        sParameter.schema.enum = [];
         enm.each(function() {
           var val = $(this);
-          sParameter.enum.push(val.text());
+          sParameter.schema.enum.push(val.text());
         })
-        sParameter.enum = _.uniq(sParameter.enum);
+        sParameter.schema.enum = _.uniq(sParameter.enum);
       }
     }
     if (path.match(new RegExp('\\{' + sParameter.name + '\\}'))) {
@@ -193,16 +200,16 @@ function addOperationToSwagger($, op, method, path, qs) {
     } else {
       sParameter.in = extractText(param, config.parameterIn) || config.defaultParameterLocations[method];
     }
-    if (sParameter.in === 'field') {
-      bodyParam = bodyParam || {name: 'body', in: 'body', schema: {properties: {}}};
+    if ((sParameter.in === 'field') || (sParameter.in === 'requestBody')) {
+      bodyParam = bodyParam || {schema: {properties: {}}};
       bodyParam.schema.properties = bodyParam.schema.properties || {};
-      bodyParam.schema.properties[sParameter.name] = bodyParam.schema.properties[sParameter.name] || {type: sParameter.type};
+      bodyParam.schema.properties[sParameter.name] = bodyParam.schema.properties[sParameter.name] || {type: sParameter.schema.type};
       sParameter = null;
     }
     if (sParameter) sOp.parameters.push(sParameter);
   });
   if (bodyParam) {
-    sOp.parameters.push(bodyParam);
+    sOp.requestBody = bodyParam;
   }
 
   var responses = resolveSelector(op, config.responses, $).first();
@@ -214,12 +221,18 @@ function addOperationToSwagger($, op, method, path, qs) {
     var responseDescription = extractText(response, config.responseDescription);
     var responseSchema = extractJSON(response, config.responseSchema);
     sOp.responses[responseStatus] = {
-        description: responseDescription || '',
-        schema: responseSchema || undefined,
+        description: responseDescription || ''
     };
+    if (responseSchema) {
+      sOp.responses[responseStatus].content = {
+        'application/json': {
+          schema: responseSchema
+        }
+      };
+    }
   });
   if (Object.keys(sOp.responses).length === 0) {
-    sOp.responses.default = {'description': 'Unknown'};
+    sOp.responses.default = {'description': 'Default'};
   }
 }
 
@@ -297,9 +310,9 @@ function extractInteger(el, extractor) {
 }
 
 function fixErrors() {
-  for (var path in swagger.paths) {
-    for (var method in swagger.paths[path]) {
-      var op = swagger.paths[path][method];
+  for (var path in openapi.paths) {
+    for (var method in openapi.paths[path]) {
+      var op = openapi.paths[path][method];
       op.parameters = op.parameters.filter(function(p) {
         var bestParamWithName = op.parameters.filter(function(p2) {
           return p2.name === p.name
@@ -308,8 +321,8 @@ function fixErrors() {
           if (p2.in === 'query' && !p1.in === 'query') return -1;
           if (p1.schema && !p2.schema) return -1;
           if (p2.schema && !p1.schema) return 1;
-          if (p1.type && !p2.type) return -1;
-          if (p2.type && !p1.type) return 1;
+          if (p1.schema.type && !p2.schema.type) return -1;
+          if (p2.schema.type && !p1.schema.type) return 1;
           if (p1.schema && p2.schema) {
             var p1len = JSON.stringify(p1.schema).length;
             var p2len = JSON.stringify(p2.schema).length;
@@ -336,10 +349,11 @@ function fixErrors() {
           origParam.in = 'path';
           origParam.required = true;
         }
-        else op.parameters.push({in: 'path', name: paramName, type: 'string', required: true})
+        else op.parameters.push({in: 'path', name: paramName, required: true, 
+          schema: { type: 'string' } });
       }
 
-      if (config.deduplicateBodyParameter) {
+      if (config.deduplicateBodyParameter) { //! nop at the moment
         var bodyParam = op.parameters.filter(function(p) {return p.in === 'body'})[0];
         if (bodyParam && bodyParam.schema) {
           var props = bodyParam.schema.properties || {};
@@ -351,7 +365,7 @@ function fixErrors() {
       }
     }
   }
-  if (config.fixup) config.fixup(swagger);
+  if (config.fixup) config.fixup(openapi);
 }
 
 scrapeInfo(config.url, function(err) {
@@ -359,17 +373,17 @@ scrapeInfo(config.url, function(err) {
   scrapePage(config.url, config.depth === 0 ? 0 : (config.depth || 1), function(err) {
     if (err) throw err;
     fixErrors();
-    outputFile = argv.output || './swagger.json';
-    fs.writeFileSync(outputFile, JSON.stringify(deepSort(swagger), null, 2));
+    outputFile = argv.output || './openapi.yaml';
+    fs.writeFileSync(outputFile, yaml.stringify(deepSort(openapi)));
     if (argv.validate) {
-      swaggerSpecValidator.validateFile(outputFile)
-          .then(result => {
-            if (Object.keys(result).length === 0) {
-              console.log('Spec is valid');
-            } else {
-              console.log('Spec is invalid');
-            }
-          })
+      //swaggerSpecValidator.validateFile(outputFile)
+      //    .then(result => {
+      //      if (Object.keys(result).length === 0) {
+      //        console.log('Spec is valid');
+      //      } else {
+      //        console.log('Spec is invalid');
+      //      }
+      //    })
     }
   });
 });

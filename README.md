@@ -1,25 +1,25 @@
-# scrape-to-swagger
+# scrape-to-oas
 
 ## Usage
 See the [config directory](config) for example configurations
 
 ```bash
-npm install -g scrape-to-swagger
-scrape-to-swagger --config ./config/product-hunt.js --output ./output/product-hunt.swagger.json --verbose
+npm install -g scrape-to-oas
+scrape-to-oas --config ./config/product-hunt.js --output ./output/product-hunt.oas.json --verbose
 ```
 
 ## Config
 
-The configuration file tells scrape-to-swagger how to retrieve each piece of the swagger document from the HTML.
+The configuration file tells scrape-to-oas how to retrieve each piece of the oas document from the HTML.
 
 #### Required
 * `url` - The root page to scrape
 * `depth` - The depth to crawl links
 
 #### Selectors
-Selector fields correspond to parts of the Swagger document. These can be specified as constants or as selectors.
+Selector fields correspond to parts of the oas document. These can be specified as constants or as selectors.
 * `host`
-* `basePath`
+* `basePath` - `schemes`, `host` and `basePath` are converted to `servers`
 * `title`
 * `description`
 * `operations` - A group of operations
@@ -50,7 +50,7 @@ The selector object takes four parameters:
 
 #### Other
 
-* `fixPathParameters` a function for converting to Swagger-style parameters, e.g. from /users/:username to /users/{username}
+* `fixPathParameters` a function for converting to oas-style parameters, e.g. from /users/:username to /users/{username}
 
 ```js
 var config = module.exports = {

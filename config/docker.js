@@ -1,7 +1,7 @@
 var RESPONSE_SELECTOR = 'p > strong:contains(response) + pre > code.hljs'
 
 var config = module.exports = {
-  url: 'https://docs.docker.com/engine/reference/api/docker_remote_api_v1.21/',
+  url: 'https://docs.docker.com/engine/api/v1.21/',
   depth: 0,
   host: 'localhost',
   basePath: '/',
