@@ -5,7 +5,7 @@ See the [config directory](config) for example configurations
 
 ```bash
 npm install -g scrape-to-oas
-scrape-to-oas --config ./config/product-hunt.js --output ./output/product-hunt.oas.json --verbose
+scrape-to-oas --config ./config/product-hunt.js --output ./output/product-hunt.oas.yaml --verbose
 ```
 
 ## Config

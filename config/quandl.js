@@ -1,5 +1,5 @@
 var config = module.exports = {
-  url: 'https://www.quandl.com/docs/api',
+  url: 'https://docs.quandl.com/docs',
   depth: 0,
   protocols: ['https'],
   host: 'www.quandl.com',

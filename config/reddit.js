@@ -53,7 +53,8 @@ var config = module.exports = {
 config.securityDefinitions = {
   "OAuth": {
     "type": "oauth2",
-    "flow": "accessCode",
+    "flows": {
+       "accessCode": {
     "authorizationUrl": "https://www.reddit.com/api/v1/authorize",
     "tokenUrl": "https://www.reddit.com/api/v1/access_token",
     "scopes": {
@@ -83,6 +84,7 @@ config.securityDefinitions = {
       "modself": "Accept invitations to moderate a subreddit. Remove myself as a moderator or contributor of subreddits I moderate or contribute to.",
       "history": "Access my voting history and comments or submissions I've saved or hidden.",
       "flair": "Select my subreddit flair. Change link flair on my submissions."
+    }
     }
   }
 }
