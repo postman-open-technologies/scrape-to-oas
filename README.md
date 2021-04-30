@@ -1,5 +1,9 @@
 # scrape-to-oas
 
+Scrape-to-OAS scrapes HTML API documentation using jQuery-like CSS selectors and regexes to produce valid OpenAPI 3.0 definitions.
+
+It is based on https://github.com/rbren/scrape-to-swagger by Robert Brennan.
+
 ## Usage
 See the [config directory](config) for example configurations
 
@@ -94,3 +98,4 @@ config.securityDefinitions = {
   }
 }
 ```
+
